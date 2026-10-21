@@ -42,6 +42,7 @@ target("CoralFans") -- Change this to your mod name.
     end
     add_defines("COMMITID=\"$(shell git rev-parse HEAD)\"")
     add_defines("CF_VERSION=\"$(shell git describe --tags --abbrev=0 --always)\"")
+    add_defines("_HAS_CXX23=1")
     add_packages("levilamina", "bsci")
     set_kind("shared")
     set_languages("c++20")
