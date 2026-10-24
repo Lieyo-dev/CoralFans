@@ -10,6 +10,8 @@
 #include "ll/api/i18n/I18n.h"
 #include "mc/server/commands/CommandOrigin.h"
 #include "mc/server/commands/CommandOutput.h"
+#include "mc/world/actor/Actor.h"
+#include "mc/world/actor/player/Player.h"
 #include <string>
 
 
@@ -30,7 +32,7 @@ void registerProfCommand(config::CommandConfigStruct& config) {
         profCommand.runtimeOverload()
             .optional("type", ll::command::ParamKind::Enum, "profType")
             .optional("numberOfTick", ll::command::ParamKind::Int)
-            .execute([](CommandOrigin const&, CommandOutput& output, ll::command::RuntimeCommand const& self) {
+            .execute([](CommandOrigin const& origin, CommandOutput& output, ll::command::RuntimeCommand const& self) {
                 using ll::i18n_literals::operator""_tr;
                 uint64 type         = functions::Profiler::Type::normal;
                 int    numberOfTick = 100;
@@ -40,7 +42,11 @@ void registerProfCommand(config::CommandConfigStruct& config) {
                 if (numberOfTick <= 0 || numberOfTick > 1200) return output.error("command.prof.error.outofrange"_tr());
                 auto& profiler = functions::Profiler::getInstance();
                 if (profiler.profiling) return output.error("command.prof.error.running"_tr());
-                profiler.start(numberOfTick, type);
+                // 记录发起者：玩家 -> 结果只发给该玩家；控制台/其他来源 -> 结果只输出到控制台
+                std::optional<mce::UUID> requester;
+                if (auto* entity = origin.getEntity(); entity && entity->isType(ActorType::Player))
+                    requester = static_cast<Player*>(entity)->getUuid();
+                profiler.start(numberOfTick, type, requester);
                 output.success("command.prof.success"_tr());
             });
     }

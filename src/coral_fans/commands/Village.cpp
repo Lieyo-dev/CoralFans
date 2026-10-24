@@ -46,52 +46,18 @@ void registerVillageCommand(config::CommandConfigStruct& config) {
             .text("show")
             .required("type", ll::command::ParamKind::Enum, "villageShowType")
             .optional("enable", ll::command::ParamKind::Bool)
-            .execute([](CommandOrigin const&, CommandOutput& output, ll::command::RuntimeCommand const& self) {
+            .execute([](CommandOrigin const& origin, CommandOutput& output, ll::command::RuntimeCommand const& self) {
                 using ll::i18n_literals::operator""_tr;
+                COMMAND_CHECK_PLAYER
                 auto& villageManager = functions::CFVillageManager::getInstance();
-                bool  isopen         = false;
-                switch (self["type"].get<ll::command::ParamKind::Enum>().index) {
-                case 0:
-                    if (self["enable"].has_value())
-                        villageManager.setShowBounds(self["enable"].get<ll::command::ParamKind::Bool>());
-                    else villageManager.setShowBounds(!villageManager.getShowBounds());
-                    isopen = villageManager.getShowBounds();
-                    break;
-                case 1:
-                    if (self["enable"].has_value())
-                        villageManager.setShowRaidBounds(self["enable"].get<ll::command::ParamKind::Bool>());
-                    else villageManager.setShowRaidBounds(!villageManager.getShowRaidBounds());
-                    isopen = villageManager.getShowRaidBounds();
-                    break;
-                case 2:
-                    if (self["enable"].has_value())
-                        villageManager.setShowIronSpawn(self["enable"].get<ll::command::ParamKind::Bool>());
-                    else villageManager.setShowIronSpawn(!villageManager.getShowIronSpawn());
-                    isopen = villageManager.getShowIronSpawn();
-                    break;
-                case 3:
-                    if (self["enable"].has_value())
-                        villageManager.setShowCenter(self["enable"].get<ll::command::ParamKind::Bool>());
-                    else villageManager.setShowCenter(!villageManager.getShowCenter());
-                    isopen = villageManager.getShowCenter();
-                    break;
-                case 4:
-                    if (self["enable"].has_value())
-                        villageManager.setShowPoiQuery(self["enable"].get<ll::command::ParamKind::Bool>());
-                    else villageManager.setShowPoiQuery(!villageManager.getShowPoiQuery());
-                    isopen = villageManager.getShowPoiQuery();
-                    break;
-                case 5:
-                    if (self["enable"].has_value())
-                        villageManager.setShowBind(self["enable"].get<ll::command::ParamKind::Bool>());
-                    else villageManager.setShowBind(!villageManager.getShowBind());
-                    isopen = villageManager.getShowBind();
-                    break;
-                }
+                auto  type = static_cast<functions::VillageShowType>(self["type"].get<ll::command::ParamKind::Enum>().index);
+                if (self["enable"].has_value())
+                    villageManager.setShow(*player, type, self["enable"].get<ll::command::ParamKind::Bool>());
+                else villageManager.setShow(*player, type, !villageManager.getShow(*player, type));
                 output.success(
                     "command.village.show.output"_tr(
                         self["type"].get<ll::command::ParamKind::Enum>().name,
-                        isopen ? "true" : "false"
+                        villageManager.getShow(*player, type) ? "true" : "false"
                     )
                 );
             });

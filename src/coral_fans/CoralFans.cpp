@@ -1,4 +1,6 @@
 #include "coral_fans/CoralFans.h"
+#include "coral_fans/base/PlayerShowStore.h"
+#include "ll/api/event/player/PlayerJoinEvent.h"
 #include "base/MySchedule.h"
 #include "bsci/GeometryGroup.h"
 #include "coral_fans/commands/Commands.h"
@@ -113,14 +115,13 @@ void CoralFans::removeRuntimeData() {
     functions::FreeCameraManager::getInstance().FreeCamList.clear();
     functions::TickCommandManager::getInstance().clear();
     functions::HopperCounterManager::getInstance().clearAllData();
-    functions::HsaManager::getInstance().setHsaShow(false);
-    functions::HsaManager::getInstance().setStructureShow(false);
+    functions::HsaManager::getInstance().clear();
     functions::locate::DuplicatableManager::getInstance().clear();
     functions::locate::PortalManager::getInstance().clear();
     functions::PopulationCapManager::getInstance().clear();
     functions::NoclipManager::getInstance().clear();
     functions::ShortcutsManager::getInstance().clear();
-    functions::SlimeManager::getInstance().setShow(false);
+    functions::SlimeManager::getInstance().clear();
     functions::SpawnAnalyzer::getInstance().shutdown();
     functions::CFVillageManager::getInstance().clear();
     my_schedule::MySchedule::getSchedule().clear();
@@ -181,6 +182,12 @@ bool CoralFans::load() {
         })
     );
 #endif
+    // 玩家进服时恢复其 hsa / slime / village 的显示开关
+    getEventListeners().emplace(
+        ll::event::EventBus::getInstance().emplaceListener<ll::event::PlayerJoinEvent>([](ll::event::PlayerJoinEvent& event) {
+            show_store::restoreAll(event.self());
+        })
+    );
     functions::ShortcutsManager::getInstance().registerShortcutsListener();
     return true;
 }

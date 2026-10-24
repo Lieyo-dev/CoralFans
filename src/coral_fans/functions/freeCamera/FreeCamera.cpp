@@ -3,6 +3,8 @@
 #include "coral_fans/base/Macros.h"
 #include "ll/api/memory/Hook.h"
 #include "ll/api/service/Bedrock.h"
+#include "mc/deps/vanilla_components/StateVectorComponent.h"
+#include "mc/entity/components/ActorRotationComponent.h"
 #include "mc/legacy/ActorUniqueID.h"
 #include "mc/network/ServerNetworkHandler.h"
 #include "mc/network/packet/AddPlayerPacket.h"
@@ -92,7 +94,10 @@ void SendActorLinkPacket(Player* pl) {
 */
 
 void FreeCameraManager::EnableFreeCamera(Player* pl) {
-    FreeCameraManager::getInstance().FreeCamList.insert(pl->getUuid().asString());
+    auto& mgr = FreeCameraManager::getInstance();
+    mgr.FreeCamList.insert(pl->getUuid().asString());
+    // 灵魂的初始状态 = 当前肉身状态，之后由 PlayerAuthInputPacket 持续更新
+    mgr.SoulStates[pl->getUuid().asString()] = {pl->getPosition(), Vec3::ZERO(), pl->getRotation()};
     EnableFreeCameraPacket(pl);
     SendFakePlayerPacket(pl);
     // SendActorLinkPacket(pl);
@@ -103,6 +108,7 @@ void FreeCameraManager::DisableFreeCamera(Player* pl) {
     auto dimid = pl->getDimensionId();
     // auto links = pl->getLinks();
     FreeCameraManager::getInstance().FreeCamList.erase(pl->getUuid().asString());
+    FreeCameraManager::getInstance().SoulStates.erase(pl->getUuid().asString());
     DisableFreeCameraPacket(pl);
     pl->teleport(pos, dimid);
     // for (auto& link : links) {
@@ -125,8 +131,16 @@ LL_TYPE_INSTANCE_HOOK(
 ) {
     RETURN_IF_NOT_MAIN_THREAD(origin(source, packet));
     auto player = thisFor<NetEventCallback>()->_getServerPlayer(source, packet.mSenderSubId);
-    if (!FreeCameraManager::getInstance().FreeCamList.contains(player->getUuid().asString())) [[likely]] {
+    auto& mgr  = FreeCameraManager::getInstance();
+    auto  uuid = player->getUuid().asString();
+    if (!mgr.FreeCamList.contains(uuid)) [[likely]] {
         origin(source, packet);
+    } else {
+        // freecam 中：丢弃该包（肉身不动），但记录灵魂的位置/朝向供 HUD 等使用
+        auto& soul    = mgr.SoulStates[uuid];
+        soul.pos      = *packet.mPos;
+        soul.posDelta = *packet.mPosDelta;
+        soul.rot      = *packet.mRot;
     }
 }
 
@@ -188,6 +202,7 @@ LL_TYPE_INSTANCE_HOOK(
 ) {
     RETURN_IF_NOT_MAIN_THREAD(origin());
     FreeCameraManager::getInstance().FreeCamList.erase(getUuid().asString());
+    FreeCameraManager::getInstance().SoulStates.erase(getUuid().asString());
     return origin();
 }
 
@@ -202,6 +217,37 @@ struct Impl {
 };
 
 std::unique_ptr<Impl> impl;
+
+SoulViewGuard::SoulViewGuard(Player& player) {
+    auto& mgr  = FreeCameraManager::getInstance();
+    auto  uuid = player.getUuid().asString();
+    if (!mgr.FreeCamList.contains(uuid)) return;
+    auto it = mgr.SoulStates.find(uuid);
+    if (it == mgr.SoulStates.end()) return;
+    auto const& soul = it->second;
+
+    mPlayer      = &player;
+    mOldPos      = player.mBuiltInComponents->mStateVectorComponent->mPos;
+    mOldPosPrev  = player.mBuiltInComponents->mStateVectorComponent->mPosPrev;
+    mOldPosDelta = player.mBuiltInComponents->mStateVectorComponent->mPosDelta;
+    mOldRot      = player.mBuiltInComponents->mActorRotationComponent->mRot;
+    mOldRotPrev  = player.mBuiltInComponents->mActorRotationComponent->mRotPrev;
+
+    player.mBuiltInComponents->mStateVectorComponent->mPos      = soul.pos;
+    player.mBuiltInComponents->mStateVectorComponent->mPosPrev  = soul.pos;
+    player.mBuiltInComponents->mStateVectorComponent->mPosDelta = soul.posDelta;
+    player.mBuiltInComponents->mActorRotationComponent->mRot     = soul.rot;
+    player.mBuiltInComponents->mActorRotationComponent->mRotPrev = soul.rot;
+}
+
+SoulViewGuard::~SoulViewGuard() {
+    if (!mPlayer) return;
+    mPlayer->mBuiltInComponents->mStateVectorComponent->mPos      = mOldPos;
+    mPlayer->mBuiltInComponents->mStateVectorComponent->mPosPrev  = mOldPosPrev;
+    mPlayer->mBuiltInComponents->mStateVectorComponent->mPosDelta = mOldPosDelta;
+    mPlayer->mBuiltInComponents->mActorRotationComponent->mRot     = mOldRot;
+    mPlayer->mBuiltInComponents->mActorRotationComponent->mRotPrev = mOldRotPrev;
+}
 
 void FreeCameraManager::freecameraHook(bool enable) {
     if (enable) {

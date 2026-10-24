@@ -1,5 +1,6 @@
 #include "coral_fans/functions/slime/Slime.h"
 #include "coral_fans/CoralFans.h"
+#include "coral_fans/base/PlayerShowStore.h"
 #include "coral_fans/base/Utils.h"
 
 
@@ -12,57 +13,79 @@
 #include "mc/world/level/levelgen/structure/BoundingBox.h"
 
 namespace coral_fans::functions {
-void SlimeManager::setShow(bool show) {
-    if (this->mShow == show) return;
-    this->mShow = show;
+void SlimeManager::setShow(Player& player, bool show, bool persist) {
+    if (persist) show_store::set(player.getUuid(), "slime.show", show);
+    if (this->getShow(player) == show) return;
     if (show) {
+        auto [it, inserted] = this->mPlayerStates.try_emplace(player.getUuid());
+        it->second.group    = bsci::GeometryGroup::createDefault(player.getUuid());
         this->tickCounter              = 0;
         this->runtimeRemoveTickCounter = 1;
-    } else this->remove();
+    } else {
+        auto it = this->mPlayerStates.find(player.getUuid());
+        if (it == this->mPlayerStates.end()) return;
+        this->removeAll(it->second);
+        this->mPlayerStates.erase(it);
+    }
 }
 
-bool SlimeManager::getShow() { return this->mShow; }
+bool SlimeManager::getShow(Player const& player) { return this->mPlayerStates.contains(player.getUuid()); }
+
+void SlimeManager::clear() {
+    for (auto& [uuid, state] : this->mPlayerStates) this->removeAll(state);
+    this->mPlayerStates.clear();
+}
 
 void SlimeManager::draw() {
     auto level = ll::service::getLevel();
     if (!level.has_value()) [[unlikely]]
         return;
-    auto&      geometryGroup = CoralFans::getInstance().getGeometryGroup();
-    static int radius        = std::max(0, CoralFans::getInstance().getConfig().functions.slime.drawRadius);
-    level->forEachPlayer([&](Player& player) {
-        auto originChunkPos = utils::blockPosToChunkPos(player.getFeetBlockPos());
-        for (int i = -radius; i <= radius; ++i) {
-            int maxJ = radius - abs(i);
-            for (int j = -maxJ; j <= maxJ; ++j) {
-                auto         seed = ((originChunkPos.x + i) * 0x1f1f1f1fu) ^ (uint32_t)(originChunkPos.z + j);
-                std::mt19937 mt(seed);
-                if (mt() % 10 == 0) {
-                    auto [it, inserted] =
-                        this->mParticleMap.try_emplace(ChunkPos(originChunkPos.x + i, originChunkPos.z + j));
-                    if (inserted) {
-                        it->second.first = geometryGroup->box(
-                            0,
-                            AABB{
-                                {(originChunkPos.x + i) * 16 + 0.1,  -64, (originChunkPos.z + j) * 16 + 0.1 },
-                                {(originChunkPos.x + i) * 16 + 15.9, 320, (originChunkPos.z + j) * 16 + 15.9}
-                        },
-                            mce::Color::GREEN()
-                        );
-                    }
-                    it->second.second = 0;
+    for (auto it = this->mPlayerStates.begin(); it != this->mPlayerStates.end();) {
+        auto* player = level->getPlayer(it->first);
+        if (!player) {
+            // 玩家已离线，清理其显示数据
+            this->removeAll(it->second);
+            it = this->mPlayerStates.erase(it);
+            continue;
+        }
+        this->drawForPlayer(it->second, *player);
+        ++it;
+    }
+}
+
+void SlimeManager::drawForPlayer(PlayerSlimeState& state, Player& player) {
+    static int radius = std::max(0, CoralFans::getInstance().getConfig().functions.slime.drawRadius);
+    auto       originChunkPos = utils::blockPosToChunkPos(player.getFeetBlockPos());
+    for (int i = -radius; i <= radius; ++i) {
+        int maxJ = radius - abs(i);
+        for (int j = -maxJ; j <= maxJ; ++j) {
+            auto         seed = ((originChunkPos.x + i) * 0x1f1f1f1fu) ^ (uint32_t)(originChunkPos.z + j);
+            std::mt19937 mt(seed);
+            if (mt() % 10 == 0) {
+                auto [it, inserted] =
+                    state.particleMap.try_emplace(ChunkPos(originChunkPos.x + i, originChunkPos.z + j));
+                if (inserted) {
+                    it->second.first = state.group->box(
+                        0,
+                        AABB{
+                            {(originChunkPos.x + i) * 16 + 0.1,  -64, (originChunkPos.z + j) * 16 + 0.1 },
+                            {(originChunkPos.x + i) * 16 + 15.9, 320, (originChunkPos.z + j) * 16 + 15.9}
+                    },
+                        mce::Color::GREEN()
+                    );
                 }
+                it->second.second = 0;
             }
         }
-        return true;
-    });
+    }
 }
 
 void SlimeManager::tick() {
-    if (!this->mShow) return;
+    if (this->mPlayerStates.empty()) return;
     if (!this->tickCounter) {
         this->draw();
         if (!this->runtimeRemoveTickCounter) {
-            this->runtimeRemove();
+            for (auto& [uuid, state] : this->mPlayerStates) this->runtimeRemove(state);
         }
         static int removeInterval =
             std::max(1, CoralFans::getInstance().getConfig().functions.slime.runtimeRemoveScale);
@@ -72,20 +95,18 @@ void SlimeManager::tick() {
     this->tickCounter   = (this->tickCounter + 1) % interval;
 }
 
-void SlimeManager::remove() {
-    auto& geometryGroup = CoralFans::getInstance().getGeometryGroup();
-    for (auto& [_, data] : this->mParticleMap) {
-        geometryGroup->remove(data.first);
-    }
-    this->mParticleMap.clear();
+void SlimeManager::removeAll(PlayerSlimeState& state) {
+    if (!state.group) return;
+    for (auto& [_, data] : state.particleMap) state.group->remove(data.first);
+    state.particleMap.clear();
 }
 
-void SlimeManager::runtimeRemove() {
-    auto& geometryGroup = CoralFans::getInstance().getGeometryGroup();
+void SlimeManager::runtimeRemove(PlayerSlimeState& state) {
+    auto& geometryGroup = *state.group;
     auto& slimeConfig   = CoralFans::getInstance().getConfig().functions.slime;
-    std::erase_if(this->mParticleMap, [&geometryGroup, &slimeConfig](auto& data) {
+    std::erase_if(state.particleMap, [&geometryGroup, &slimeConfig](auto& data) {
         if (data.second.second == slimeConfig.runtimeRemoveScale) {
-            geometryGroup->remove(data.second.first);
+            geometryGroup.remove(data.second.first);
             return true;
         }
         return false;

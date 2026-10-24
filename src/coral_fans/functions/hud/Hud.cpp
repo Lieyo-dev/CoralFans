@@ -2,6 +2,7 @@
 #include "coral_fans/CoralFans.h"
 #include "coral_fans/base/Utils.h"
 #include "coral_fans/functions/data/Data.h"
+#include "coral_fans/functions/freeCamera/FreeCamera.h"
 #include "coral_fans/functions/func/FuncManager.h"
 
 
@@ -60,6 +61,9 @@ void HudHelper::tick() {
                 } catch (...) {
                     return true;
                 }
+                // freecam 期间让 HUD 基于“灵魂”（客户端自由视角）而不是原地不动的“肉身”：
+                // 作用域内临时把玩家的位置/速度/朝向替换为灵魂的，离开 lambda 时自动恢复
+                SoulViewGuard soulGuard(player);
                 std::string msg;
                 double mspt = (double)ProfilerLite::gProfilerLiteInstance().mDebugServerTickTime->count() / 1000000.0;
                 double currentTps  = mspt <= 50 ? 20 : (double)(1000.0 / mspt);

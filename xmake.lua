@@ -3,11 +3,12 @@ add_rules("mode.debug", "mode.release")
 add_repositories("liteldev-repo https://github.com/LiteLDev/xmake-repo.git")
 add_repositories("oeotyan-repo https://github.com/OEOTYAN/xmake-repo.git")
 
-add_requires("levilamina", {configs = {target_type = get_config("target_type")}})
-
+add_requires("levilamina 26.51.7", {configs = {target_type = get_config("target_type")}})
 add_requires("levibuildscript")
 
-add_requires("bsci", {configs = {target_type = get_config("target_type")}})
+-- 1. 删除了原本的远程 add_requires("bsci ...")
+-- 改为引入本地的 bsci Xmake 项目目录（请根据你实际存放 bsci 源码的路径调整，比如 "libs/bsci" 或 "bsci"）
+includes("libs/bsci")
 
 if not has_config("vs_runtime") then
     set_runtimes("MD")
@@ -42,7 +43,13 @@ target("CoralFans") -- Change this to your mod name.
     end
     add_defines("COMMITID=\"$(shell git rev-parse HEAD)\"")
     add_defines("CF_VERSION=\"$(shell git describe --tags --abbrev=0 --always)\"")
-    add_packages("levilamina", "bsci")
+    add_defines("_HAS_CXX23=1")
+    
+    -- 2. 注意：如果是远程包，用 add_packages("bsci")；
+    -- 换成本地 includes 后，需要通过 add_deps 链接本地 target 名 "BedrockServerClientInterface"
+    add_packages("levilamina")
+    add_deps("BedrockServerClientInterface")
+
     set_kind("shared")
     set_languages("c++20")
     set_symbols("debug")
@@ -51,12 +58,8 @@ target("CoralFans") -- Change this to your mod name.
     add_includedirs("src")
     if is_config("target_type", "server") then
         add_defines("LL_PLAT_S")
-    --  add_includedirs("src-server")
-    --  add_files("src-server/**.cpp")
     else
         add_defines("LL_PLAT_C")
-    --  add_includedirs("src-client")
-    --  add_files("src-client/**.cpp")
     end
     after_build(function (target)
         local mod_packer = import("scripts.after_build")
@@ -73,5 +76,5 @@ target("CoralFans") -- Change this to your mod name.
             modVersion = major .. "." .. minor .. "." .. patch,
         }
         
-        mod_packer.pack_mod(target,mod_define)
+        mod_packer.pack_mod(target, mod_define)
     end)

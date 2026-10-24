@@ -28,12 +28,14 @@ void registerHsaCommand(config::CommandConfigStruct& config) {
     hsaCommand.runtimeOverload()
         .text("show")
         .optional("isopen", ll::command::ParamKind::Bool)
-        .execute([](CommandOrigin const&, CommandOutput& output, ll::command::RuntimeCommand const& self) {
+        .execute([](CommandOrigin const& origin, CommandOutput& output, ll::command::RuntimeCommand const& self) {
             using ll::i18n_literals::operator""_tr;
+            COMMAND_CHECK_PLAYER
             auto& hsaManager = functions::HsaManager::getInstance();
-            if (self["isopen"].has_value()) hsaManager.setHsaShow(self["isopen"].get<ll::command::ParamKind::Bool>());
-            else hsaManager.setHsaShow(!hsaManager.getHsaShow());
-            output.success("command.hsa.show.output"_tr(hsaManager.getHsaShow() ? "true" : "false"));
+            if (self["isopen"].has_value())
+                hsaManager.setHsaShow(*player, self["isopen"].get<ll::command::ParamKind::Bool>());
+            else hsaManager.setHsaShow(*player, !hsaManager.getHsaShow(*player));
+            output.success("command.hsa.show.output"_tr(hsaManager.getHsaShow(*player) ? "true" : "false"));
         });
 
     // hsa structure show [bool]
@@ -41,13 +43,16 @@ void registerHsaCommand(config::CommandConfigStruct& config) {
         .text("structure")
         .text("show")
         .optional("isopen", ll::command::ParamKind::Bool)
-        .execute([](CommandOrigin const&, CommandOutput& output, ll::command::RuntimeCommand const& self) {
+        .execute([](CommandOrigin const& origin, CommandOutput& output, ll::command::RuntimeCommand const& self) {
             using ll::i18n_literals::operator""_tr;
+            COMMAND_CHECK_PLAYER
             auto& hsaManager = functions::HsaManager::getInstance();
             if (self["isopen"].has_value())
-                hsaManager.setStructureShow(self["isopen"].get<ll::command::ParamKind::Bool>());
-            else hsaManager.setStructureShow(!hsaManager.getStructureShow());
-            output.success("command.hsa.structure.show.output"_tr(hsaManager.getStructureShow() ? "true" : "false"));
+                hsaManager.setStructureShow(*player, self["isopen"].get<ll::command::ParamKind::Bool>());
+            else hsaManager.setStructureShow(*player, !hsaManager.getStructureShow(*player));
+            output.success(
+                "command.hsa.structure.show.output"_tr(hsaManager.getStructureShow(*player) ? "true" : "false")
+            );
         });
 
     // hsa list

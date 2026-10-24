@@ -26,12 +26,14 @@ void registerSlimeCommand(config::CommandConfigStruct& config) {
     slimeCommand.runtimeOverload()
         .text("show")
         .optional("isopen", ll::command::ParamKind::Bool)
-        .execute([](CommandOrigin const&, CommandOutput& output, ll::command::RuntimeCommand const& self) {
+        .execute([](CommandOrigin const& origin, CommandOutput& output, ll::command::RuntimeCommand const& self) {
             using ll::i18n_literals::operator""_tr;
+            COMMAND_CHECK_PLAYER
             auto& slimeManager = functions::SlimeManager::getInstance();
-            if (self["isopen"].has_value()) slimeManager.setShow(self["isopen"].get<ll::command::ParamKind::Bool>());
-            else slimeManager.setShow(!slimeManager.getShow());
-            output.success("command.slime.show.output"_tr(slimeManager.getShow() ? "true" : "false"));
+            if (self["isopen"].has_value())
+                slimeManager.setShow(*player, self["isopen"].get<ll::command::ParamKind::Bool>());
+            else slimeManager.setShow(*player, !slimeManager.getShow(*player));
+            output.success("command.slime.show.output"_tr(slimeManager.getShow(*player) ? "true" : "false"));
         });
 
     // slime check

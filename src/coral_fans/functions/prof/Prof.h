@@ -1,11 +1,13 @@
 #pragma once
 
 #include "ll/api/base/StdInt.h"
+#include "mc/platform/UUID.h"
 #include "mc/world/level/ChunkPos.h"
 
 #include <chrono>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -95,6 +97,8 @@ public:
     static std::vector<std::pair<std::string, uint64>>    TypeVec;
     uint64                                                type         = Type::normal;
     bool                                                  profiling    = false;
+    // 发起本次 prof 的玩家；为空表示由控制台（或非玩家来源）发起，结果仅输出到控制台
+    std::optional<mce::UUID> requester = std::nullopt;
     long long                                             totalRound   = 60;
     long long                                             currentRound = 0;
     ChunkProfileInfo                                      chunkInfo{};
@@ -119,7 +123,7 @@ public:
     std::string printActor() const;
     std::string printMspt() const;
     void        reset(uint64);
-    void        start(long long, uint64 = Type::normal);
+    void        start(long long, uint64 = Type::normal, std::optional<mce::UUID> requester = std::nullopt);
     void        stop();
 
 private:

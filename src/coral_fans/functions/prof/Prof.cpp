@@ -2,6 +2,9 @@
 #include "coral_fans/CoralFans.h"
 #include "coral_fans/base/Utils.h"
 #include "ll/api/i18n/I18n.h"
+#include "ll/api/service/Bedrock.h"
+#include "mc/world/actor/player/Player.h"
+#include "mc/world/level/Level.h"
 #include "mc/world/level/ChunkPos.h"
 
 #include <algorithm>
@@ -103,8 +106,9 @@ void Profiler::reset(uint64 t) {
     for (auto& pt : this->ptCounter) pt.clear();
 }
 
-void Profiler::start(long long round, uint64 t) {
+void Profiler::start(long long round, uint64 t, std::optional<mce::UUID> requesterUuid) {
     this->reset(t);
+    this->requester    = std::move(requesterUuid);
     this->profiling    = true;
     this->currentRound = 0;
     this->totalRound   = round;
@@ -113,6 +117,7 @@ void Profiler::start(long long round, uint64 t) {
 void Profiler::stop() {
     this->profiling = false;
     this->print();
+    this->requester.reset();
     this->reset(Profiler::Type::normal);
 }
 
@@ -135,8 +140,15 @@ void Profiler::print() const {
         rst = this->printMspt();
         break;
     }
-    utils::segmentAndSendToClients(rst);
-    CoralFans::getInstance().getSelf().getLogger().info(rst);
+    // 结果只输出给发起命令的玩家或控制台，不再广播给所有玩家
+    if (this->requester.has_value()) {
+        // 玩家发起：仅发送给该玩家（玩家已离线则不输出）
+        if (auto level = ll::service::getLevel(); level.has_value()) {
+            if (auto* player = level->getPlayer(*this->requester)) utils::segmentAndSendToPlayer(rst, player);
+        }
+    } else {
+        CoralFans::getInstance().getSelf().getLogger().info(rst);
+    }
 }
 
 std::string Profiler::printChunks() const {
