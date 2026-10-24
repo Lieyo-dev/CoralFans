@@ -12,6 +12,7 @@
 #include "ll/api/service/Bedrock.h"
 #include "mc/common/Brightness.h"
 #include "mc/profile/ProfilerLite.h"
+#include "mc/world/actor/Actor.h"
 #include "mc/world/actor/player/Player.h"
 #include "mc/world/item/ItemStack.h"
 #include "mc/world/level/BlockSource.h"
@@ -23,6 +24,7 @@
 #include "mc/world/level/dimension/Dimension.h"
 #include "mc/world/phys/HitResultType.h"
 #include <algorithm>
+#include <format>
 #include <map>
 #include <string>
 
@@ -31,6 +33,7 @@ namespace coral_fans::functions {
 
 std::vector<std::pair<std::string, uint64>> HudHelper::HudTypeVec = {
     {"mspt",      HudType::mspt     },
+    {"ping",      HudType::ping     },
     {"base",      HudType::base     },
     {"redstone",  HudType::redstone },
     {"village",   HudType::village  },
@@ -38,6 +41,13 @@ std::vector<std::pair<std::string, uint64>> HudHelper::HudTypeVec = {
     {"block",     HudType::block    },
     {"container", HudType::container}
 };
+
+namespace {
+std::string formatVec3(Vec3 const& v, int precision = 2) {
+    return std::format("({:.{}f}, {:.{}f}, {:.{}f})", v.x, precision, v.y, precision, v.z, precision);
+}
+
+} // namespace
 
 void HudHelper::tick() {
     using ll::i18n_literals::operator""_tr;
@@ -78,16 +88,46 @@ void HudHelper::tick() {
                         currentTps
                     );
                 }
+                if (hud & (1 << HudHelper::HudType::ping)) {
+                    auto networkStatus = player.getNetworkStatus();
+                    if (networkStatus) {
+                        const auto ping = networkStatus->mCurrentPing->count();
+                        const auto packetLoss = networkStatus->mCurrentPacketLoss;
+                        const char* pingColor =
+                            ping <= 50  ? "§a" :
+                            ping <= 100 ? "§e" :
+                                        "§c";
+                        const char* packetLossColor =
+                            packetLoss <= 1.0f ? "§a" :
+                            packetLoss <= 5.0f ? "§e" :
+                                                "§c";
+                        msg += std::format(
+                            "延迟:{}{}ms§r 丢包:{}{:.2f}%%§r\n",
+                            pingColor,
+                            ping,
+                            packetLossColor,
+                            packetLoss
+                        );
+                    } else {
+                        msg += "Ping:§cN/A§r 丢包:§cN/A§r\n";
+                    }
+                }
+
                 if (hud & (1 << HudHelper::HudType::base)) {
-                    auto& delta       = player.getPosDelta();
-                    auto& biome       = blockSource.getBiome(player.getFeetBlockPos());
-                    auto  rawName     = utils::removeMinecraftPrefix(biome.mHash->c_str());
-                    auto  translated  = ll::i18n::getInstance().get("translate.biome." + rawName, {});
-                    auto  biomeName   = translated.empty() ? rawName : std::string{translated};
-                    msg              += "translate.cfhud.base"_tr(
+                    const Vec3 rawVel = player.getVelocity();
+                    const Vec3 speed{
+                        rawVel.x * 20.0f,
+                        rawVel.y * 20.0f,
+                        rawVel.z * 20.0f
+                    };
+                    auto& biome      = blockSource.getBiome(player.getFeetBlockPos());
+                    auto  rawName    = utils::removeMinecraftPrefix(biome.mHash->c_str());
+                    auto  translated = ll::i18n::getInstance().get("translate.biome." + rawName, {});
+                    auto  biomeName  = translated.empty() ? rawName : std::string{translated};
+                    msg             += "translate.cfhud.base"_tr(
                         level->getCurrentServerTick().tickID,
-                        player.getPosition().toString(),
-                        player.getViewVector(1.0f).toString(),
+                        formatVec3(player.getPosition()),
+                        formatVec3(player.getViewVector(1.0f), 3),
                         utils::blockPosToChunkPos(player.getFeetBlockPos()).toString(),
                         hitrst.mType == HitResultType::Tile ? hitrst.mBlock.toString() : "-",
                         hitrst.mType == HitResultType::Tile ? std::to_string(blockSource
@@ -98,10 +138,10 @@ void HudHelper::tick() {
                                                                                  )
                                                                                  .mValue)
                                                             : "-",
-                        delta.length() * 20,
-                        delta.x * 20,
-                        delta.y * 20,
-                        delta.z * 20,
+                        speed.length(),
+                        speed.x,
+                        speed.y,
+                        speed.z,
                         biomeName
                     );
                 }
