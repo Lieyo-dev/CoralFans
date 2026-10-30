@@ -290,6 +290,10 @@
             "72kmining": {
                 "success": "设置 72k挖掘速度 \"{}\"",
                 "error": "设置 72k挖掘速度 失败"
+            },
+            "fuck_arrow_disappear": {
+                "success": "设置 fuck_arrow_disappear \"{}\"",
+                "error": "设置 fuck_arrow_disappear 失败"
             }
         },
         "noclip": {

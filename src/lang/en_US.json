@@ -255,6 +255,10 @@
                 "success": "set restore_ancillary_broken \"{}\"",
                 "error": "failed to set restore_ancillary_broken"
             },
+            "fuck_arrow_disappear": {
+                "success": "set fuck_arrow_disappear \"{}\"",
+                "error": "failed to set fuck_arrow_disappear"
+            },
             "fuck_population_cap": {
                 "success": "set fuck_population_cap \"{}\"",
                 "error": "failed to set fuck_population_cap",

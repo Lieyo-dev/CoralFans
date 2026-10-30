@@ -267,6 +267,21 @@ void registerMineruleCommand(config::CommandConfigStruct& config) {
             std::stoi(CoralFans::getInstance().getConfigDb()->get("functions.global.maxpt").value_or("100"));
 
         mineruleCommand.runtimeOverload()
+            .text("fuck_arrow_disappear")
+            .required("isopen", ll::command::ParamKind::Bool)
+            .execute([](CommandOrigin const&, CommandOutput& output, ll::command::RuntimeCommand const& self) {
+                using ll::i18n_literals::operator""_tr;
+                bool isopen = self["isopen"].get<ll::command::ParamKind::Bool>();
+                if (CoralFans::getInstance().getConfigDb()->set(
+                        "minerule.fuck_arrow_disappear",
+                        isopen ? "true" : "false"
+                    )) {
+                    output.success("command.minerule.fuck_arrow_disappear.success"_tr(isopen ? "true" : "false"));
+                    functions::FuckArrowDisappearHook(isopen);
+                } else output.error("command.minerule.fuck_arrow_disappear.error"_tr());
+            });
+
+        mineruleCommand.runtimeOverload()
             .text("mining_72k")
             .required("isopen", ll::command::ParamKind::Bool)
             .execute([](CommandOrigin const&, CommandOutput& output, ll::command::RuntimeCommand const& self) {
@@ -302,5 +317,7 @@ void registerMineruleCommand(config::CommandConfigStruct& config) {
     functions::MaxPtManager::hook(config.enabled && functions::MaxPtManager::getInstance().maxpt != 100);
 
     functions::miningHook(config.enabled && configDb->get("minerule.72kmining") == "true");
+
+    functions::FuckArrowDisappearHook(config.enabled && configDb->get("minerule.fuck_arrow_disappear") == "true");
 }
 } // namespace coral_fans::commands

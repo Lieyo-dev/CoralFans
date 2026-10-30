@@ -4,6 +4,7 @@
 #include "base/MySchedule.h"
 #include "bsci/GeometryGroup.h"
 #include "coral_fans/commands/Commands.h"
+#include "coral_fans/debug/Debug.h"
 #include "coral_fans/functions/freeCamera/FreeCamera.h"
 #include "coral_fans/functions/func/FuncManager.h"
 #include "coral_fans/functions/hsa/Hsa.h"
@@ -105,6 +106,7 @@ void CoralFans::unhook() {
     functions::hookTick(false, true);
     functions::CFVillageManager::hookVillage(false);
     functions::miningHook(false);
+    functions::FuckArrowDisappearHook(false);
     functions::TickCommandManager::getInstance().hook(false);
 
     // for (auto& eventListener : getEventListeners()) ll::event::EventBus::getInstance().removeListener(eventListener);
@@ -206,12 +208,14 @@ bool CoralFans::enable() {
         setupCommands();
     }
 #endif
+    debug::enable();
     return true;
 }
 
 bool CoralFans::disable() {
     getSelf().getLogger().debug("Disabling...");
     removeRuntimeData();
+    debug::disable();
     return true;
 }
 

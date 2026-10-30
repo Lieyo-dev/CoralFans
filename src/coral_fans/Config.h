@@ -88,6 +88,9 @@ struct Locate {
 struct Config {
     int         version    = 8;
     std::string locateName = "zh_CN";
+#ifdef CF_DEBUG
+    bool debugMode = true;
+#endif
 
     CommandStruct command;
 

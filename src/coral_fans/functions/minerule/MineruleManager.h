@@ -14,6 +14,7 @@ void restoreAncillaryBrokenHook(bool);
 void populationCapHook(bool);
 void pistonCollisionHook(bool);
 void miningHook(bool);
+void FuckArrowDisappearHook(bool);
 
 
 class MaxPtManager {

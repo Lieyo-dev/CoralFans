@@ -12,6 +12,8 @@
 #include "ll/api/service/Bedrock.h"
 #include "mc/common/Brightness.h"
 #include "mc/profile/ProfilerLite.h"
+#include "mc/network/packet/SetTitlePacket.h"
+#include "mc/network/packet/SetTitlePacketPayload.h"
 #include "mc/world/actor/Actor.h"
 #include "mc/world/actor/player/Player.h"
 #include "mc/world/item/ItemStack.h"
@@ -27,6 +29,7 @@
 #include <format>
 #include <map>
 #include <string>
+#include <string_view>
 
 
 namespace coral_fans::functions {
@@ -43,6 +46,94 @@ std::vector<std::pair<std::string, uint64>> HudHelper::HudTypeVec = {
 };
 
 namespace {
+// Actor::getVelocity() 返回值换算成 格/秒 的系数：
+// 返回的是每 tick 位移则填 20；如果返回值已经是 格/秒（矿车在动力铁轨上约 8），改成 1
+constexpr float kVelocityToPerSecond = 20.0f;
+
+// ---- container 物品名称本地化 ----
+// 不手动维护中英文映射：把物品的“本地化键”（如 item.diamond.name）交给客户端，
+// 由客户端按玩家自己的语言翻译。做法是用 ActionbarTextObject（与 /titleraw 相同的 rawtext JSON）发送。
+// 拼接 msg 时，用 kTrBegin/kTrEnd 包住需要客户端翻译的键，发送前再转换成 rawtext。
+constexpr char kTrBegin = '\x01';
+constexpr char kTrEnd   = '\x02';
+
+std::string jsonEscape(std::string_view s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (unsigned char c : s) {
+        switch (c) {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            if (c < 0x20) out += std::format("\\u{:04x}", (unsigned)c);
+            else out += (char)c;
+        }
+    }
+    return out;
+}
+
+// 物品显示名：自定义名称直接显示；否则返回被 kTrBegin/kTrEnd 包住的本地化键
+std::string itemNameToken(ItemStack const& item) {
+    std::string name = item.getCustomName();
+    if (!name.empty()) {
+        std::erase(name, kTrBegin);
+        std::erase(name, kTrEnd);
+        return name;
+    }
+    std::string key = item.getDescriptionId();
+    if (key.empty()) return item.getName(); // 兜底：取不到本地化键时显示原始英文名
+    if (!key.ends_with(".name")) key += ".name";
+    return std::string{kTrBegin} + key + kTrEnd;
+}
+
+// 把带 kTrBegin/kTrEnd 标记的文本转换成 rawtext JSON
+std::string toRawtextJson(std::string const& msg) {
+    std::string json = "{\"rawtext\":[";
+    bool        first = true;
+    auto        add   = [&](std::string const& part) {
+        if (!first) json += ',';
+        first  = false;
+        json  += part;
+    };
+    size_t pos = 0;
+    while (pos < msg.size()) {
+        size_t b = msg.find(kTrBegin, pos);
+        if (b == std::string::npos) {
+            add("{\"text\":\"" + jsonEscape(std::string_view{msg}.substr(pos)) + "\"}");
+            break;
+        }
+        if (b > pos) add("{\"text\":\"" + jsonEscape(std::string_view{msg}.substr(pos, b - pos)) + "\"}");
+        size_t e = msg.find(kTrEnd, b + 1);
+        if (e == std::string::npos) { // 标记不成对，当作普通文本
+            add("{\"text\":\"" + jsonEscape(std::string_view{msg}.substr(b + 1)) + "\"}");
+            break;
+        }
+        add("{\"translate\":\"" + jsonEscape(std::string_view{msg}.substr(b + 1, e - b - 1)) + "\"}");
+        pos = e + 1;
+    }
+    json += "]}";
+    return json;
+}
+
+void sendActionbarRawtext(Player& player, std::string const& json) {
+    SetTitlePacket packet{SetTitlePacketPayload::TitleType::ActionbarTextObject, json, std::nullopt};
+    packet.sendTo(player);
+}
+
+// 格式化为 (x, y, z)，而不是 Vec3::toString() 的 "Vec3(x,y,z)"
 std::string formatVec3(Vec3 const& v, int precision = 2) {
     return std::format("({:.{}f}, {:.{}f}, {:.{}f})", v.x, precision, v.y, precision, v.z, precision);
 }
@@ -114,11 +205,14 @@ void HudHelper::tick() {
                 }
 
                 if (hud & (1 << HudHelper::HudType::base)) {
+                    // 速度：使用 Actor::getVelocity()。
+                    // 不使用 getPosDelta()：玩家骑乘（矿车/马/船等）时它不会更新，坐骑的值也不可靠。
+                    // 统一换算成格/秒（见 kVelocityToPerSecond）。
                     const Vec3 rawVel = player.getVelocity();
                     const Vec3 speed{
-                        rawVel.x * 20.0f,
-                        rawVel.y * 20.0f,
-                        rawVel.z * 20.0f
+                        rawVel.x * kVelocityToPerSecond,
+                        rawVel.y * kVelocityToPerSecond,
+                        rawVel.z * kVelocityToPerSecond
                     };
                     auto& biome      = blockSource.getBiome(player.getFeetBlockPos());
                     auto  rawName    = utils::removeMinecraftPrefix(biome.mHash->c_str());
@@ -180,8 +274,7 @@ void HudHelper::tick() {
                                 std::map<std::string, int> items;
                                 for (const auto& item : container->getSlots()) {
                                     if (*item == ItemStack::EMPTY_ITEM()) continue;
-                                    std::string name = item->getCustomName();
-                                    if (name.empty()) name = item->getName();
+                                    std::string name = itemNameToken(*item);
                                     if (auto it = items.find(name); it != items.end()) it->second += item->mCount;
                                     else items.emplace(name, item->mCount);
                                 }
@@ -200,7 +293,15 @@ void HudHelper::tick() {
                     }
                 }
                 if (msg.ends_with('\n')) msg = msg.substr(0, msg.length() - 1);
-                if (!msg.empty()) utils::segmentAndSendToPlayer(msg, &player, TextPacketType::Tip);
+                if (!msg.empty()) {
+                    if (hud & (1 << HudHelper::HudType::container)) {
+                        // 开启了 container 时整个 HUD 都走 rawtext，物品名由客户端本地化
+                        // （始终使用同一种包，避免 Tip 与 Actionbar 两种文本叠在一起）
+                        sendActionbarRawtext(player, toRawtextJson(msg));
+                    } else {
+                        utils::segmentAndSendToPlayer(msg, &player, TextPacketType::Tip);
+                    }
+                }
                 return true;
             });
         }
