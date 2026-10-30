@@ -1,7 +1,7 @@
 add_rules("mode.debug", "mode.release")
 
 add_repositories("liteldev-repo https://github.com/LiteLDev/xmake-repo.git")
-add_repositories("oeotyan-repo https://github.com/OEOTYAN/xmake-repo.git")
+add_repositories("lieyodev-repo https://github.com/Lieyo-dev/xmake-repo.git")
 
 add_requires("levilamina 26.51.7", {configs = {target_type = get_config("target_type")}})
 add_requires("levibuildscript")
