@@ -1,7 +1,7 @@
 #include "MineruleManager.h"
 #include "coral_fans/base/Macros.h"
 #include "ll/api/memory/Hook.h"
-#include "mc/scripting/modules/minecraft/events/ScriptBlockBreakingEventListener.h" // ScriptBlockGlobalEventListener 的默认析构需要它是完整类型
+#include "mc/scripting/modules/minecraft/events/ScriptBlockBreakingEventListener.h"
 #include "mc/scripting/modules/minecraft/events/ScriptBlockGlobalEventListener.h"
 #include "mc/world/item/ItemStack.h"
 #include "mc/world/level/BlockPos.h"

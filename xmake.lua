@@ -6,8 +6,6 @@ add_repositories("oeotyan-repo https://github.com/OEOTYAN/xmake-repo.git")
 add_requires("levilamina 26.51.7", {configs = {target_type = get_config("target_type")}})
 add_requires("levibuildscript")
 
-includes("libs/bsci")
-
 if not has_config("vs_runtime") then
     set_runtimes("MD")
 end
@@ -42,10 +40,8 @@ target("CoralFans") -- Change this to your mod name.
     add_defines("COMMITID=\"$(shell git rev-parse HEAD)\"")
     add_defines("CF_VERSION=\"$(shell git describe --tags --abbrev=0 --always)\"")
     add_defines("_HAS_CXX23=1")
+    add_packages("levilamina", "bsci")
     
-    add_packages("levilamina")
-    add_deps("BedrockServerClientInterface")
-
     set_kind("shared")
     set_languages("c++20")
     set_symbols("debug")
