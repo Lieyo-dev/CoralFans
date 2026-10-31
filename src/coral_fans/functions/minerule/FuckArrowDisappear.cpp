@@ -124,6 +124,7 @@ LL_TYPE_INSTANCE_HOOK(
     ::HitResult const& hitResult
 ) {
     if (!onServerThread() || !owner.isType(ActorType::Arrow)) return origin(owner, hitResult);
+    mShouldBounce = ::SharedTypes::v1_26_50::ProjectileComponentDefinition::ShouldBounce::IfNoDamageDealt;
 
     // 命中前的状态：保留箭矢时需要还原，否则 hitCount 会被扣到 0，箭矢之后再也无法弹回
     // 在 FuckArrowDisappearOnHit 钩子内部，origin 调用之前
@@ -143,6 +144,9 @@ LL_TYPE_INSTANCE_HOOK(
     origin(owner, hitResult);
     if (gScope.kept && !gScope.removed) {
         mActorHitCount              = prevHitCount;
+    }
+    if (gScope.removed) {
+        mShouldBounce = ::SharedTypes::v1_26_50::ProjectileComponentDefinition::ShouldBounce::No;
     }
     gScope = prev;
 }
